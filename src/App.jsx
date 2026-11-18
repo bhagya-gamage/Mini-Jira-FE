@@ -5,7 +5,6 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Projects from './pages/Projects';
 import Board from './pages/Board';
-import Dashboard from './pages/Dashboard';
 
 export default function App() {
   return (
@@ -16,9 +15,6 @@ export default function App() {
         <Route element={<Layout />}>
           <Route path="/projects" element={<Projects />} />
           <Route path="/projects/:id" element={<Board />} />
-          <Route element={<ProtectedRoute managerOnly />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-          </Route>
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/projects" replace />} />
