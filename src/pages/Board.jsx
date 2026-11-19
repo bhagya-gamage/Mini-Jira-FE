@@ -20,6 +20,7 @@ export default function Board() {
   const [allUsers, setAllUsers] = useState([]);
   const [filters, setFilters] = useState({ q: '', assigneeId: '' });
   const [form, setForm] = useState({ title: '', priority: 'MEDIUM', dueDate: '', assigneeId: '' });
+  const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -76,6 +77,12 @@ export default function Board() {
     setTasks((ts) => ts.map((t) => (t.id === taskId ? { ...t, status } : t)));
     try { await api.patch(`/tasks/${taskId}/status`, { status }); }
     catch (err) { setTasks(prev); setError(errorMessage(err)); }
+  };
+
+  const deleteTask = async (taskId) => {
+    if (!confirm('Delete this task?')) return;
+    try { await api.delete(`/tasks/${taskId}`); setSelected(null); await loadTasks(); }
+    catch (err) { setError(errorMessage(err)); }
   };
 
   const addMember = async (e) => {
@@ -137,7 +144,8 @@ export default function Board() {
               <h4>{col.label} <span className="badge">{byStatus[col.key].length}</span></h4>
               {byStatus[col.key].map((t) => (
                 <div key={t.id} className={`task p-${t.priority}`} draggable
-                     onDragStart={(e) => e.dataTransfer.setData('text/plain', String(t.id))}>
+                     onDragStart={(e) => e.dataTransfer.setData('text/plain', String(t.id))}
+                     onClick={() => setSelected(t)}>
                   <strong>{t.title}</strong>
                   <div className="meta">
                     <span className="tag">{t.priority}</span>
@@ -150,6 +158,45 @@ export default function Board() {
           ))}
         </div>
       )}
+
+      {selected && <TaskPanel task={selected} isManager={isManager} onClose={() => setSelected(null)} onDelete={deleteTask} />}
     </>
+  );
+}
+
+function TaskPanel({ task, isManager, onClose, onDelete }) {
+  const [comments, setComments] = useState([]);
+  const [text, setText] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.get(`/tasks/${task.id}/comments`).then((r) => setComments(r.data)).catch((e) => setError(errorMessage(e)));
+  }, [task.id]);
+
+  const post = async (e) => {
+    e.preventDefault();
+    try {
+      const { data } = await api.post(`/tasks/${task.id}/comments`, { content: text });
+      setComments((c) => [...c, data]); setText('');
+    } catch (err) { setError(errorMessage(err)); }
+  };
+
+  return (
+    <aside className="panel">
+      <button className="ghost close" onClick={onClose}>✕</button>
+      <h3>{task.title}</h3>
+      <p className="muted">{task.description || 'No description'}</p>
+      <p><span className="tag">{task.priority}</span> · {task.status.replace('_', ' ')} · {task.assigneeName ?? 'Unassigned'}</p>
+      {isManager && <button className="danger" onClick={() => onDelete(task.id)}>Delete task</button>}
+      <h4>Comments</h4>
+      <ErrorBox message={error} />
+      {comments.map((c) => (
+        <div key={c.id} className="comment"><strong>{c.authorName}</strong><p>{c.content}</p></div>
+      ))}
+      <form onSubmit={post} className="row">
+        <input placeholder="Write a comment…" required value={text} onChange={(e) => setText(e.target.value)} />
+        <button>Post</button>
+      </form>
+    </aside>
   );
 }
