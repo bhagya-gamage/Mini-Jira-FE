@@ -15,25 +15,35 @@ export default function Board() {
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [members, setMembers] = useState([]);
+  const [filters, setFilters] = useState({ q: '', assigneeId: '' });
   const [form, setForm] = useState({ title: '', priority: 'MEDIUM', dueDate: '', assigneeId: '' });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const loadTasks = useCallback(async () => {
-    const { data } = await api.get(`/projects/${id}/tasks`, { params: { size: 200, sort: 'createdAt,desc' } });
+    const params = { size: 200, sort: 'createdAt,desc' };
+    if (filters.q) params.q = filters.q;
+    if (filters.assigneeId) params.assigneeId = filters.assigneeId;
+    const { data } = await api.get(`/projects/${id}/tasks`, { params });
     setTasks(data.content);
-  }, [id]);
+  }, [id, filters]);
 
   useEffect(() => {
     (async () => {
       try {
         setProject((await api.get(`/projects/${id}`)).data);
         setMembers((await api.get(`/projects/${id}/members`)).data);
-        await loadTasks();
       } catch (e) { setError(errorMessage(e)); }
-      finally { setLoading(false); }
     })();
-  }, [id, loadTasks]);
+  }, [id]);
+
+  useEffect(() => {
+    setLoading(true);
+    const t = setTimeout(() => {
+      loadTasks().catch((e) => setError(errorMessage(e))).finally(() => setLoading(false));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [loadTasks]);
 
   const byStatus = useMemo(() => {
     const g = { TODO: [], IN_PROGRESS: [], DONE: [] };
@@ -79,7 +89,15 @@ export default function Board() {
         <button>Add task</button>
       </form>
 
-      {loading ? <Loading /> : (
+      <div className="row filters">
+        <input placeholder="Search title…" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} />
+        <select value={filters.assigneeId} onChange={(e) => setFilters({ ...filters, assigneeId: e.target.value })}>
+          <option value="">All assignees</option>
+          {members.map((m) => <option key={m.userId} value={m.userId}>{m.fullName}</option>)}
+        </select>
+      </div>
+
+      {loading && tasks.length === 0 ? <Loading /> : (
         <div className="board">
           {COLUMNS.map((col) => (
             <div key={col.key} className="column"
