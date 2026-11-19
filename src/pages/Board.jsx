@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import api, { errorMessage } from '../api/axios';
+import { useAuth } from '../hooks/useAuth';
 import { ErrorBox, Loading } from '../components/Status';
 
 const COLUMNS = [
@@ -12,9 +13,11 @@ const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
 export default function Board() {
   const { id } = useParams();
+  const { isManager } = useAuth();
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [members, setMembers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [filters, setFilters] = useState({ q: '', assigneeId: '' });
   const [form, setForm] = useState({ title: '', priority: 'MEDIUM', dueDate: '', assigneeId: '' });
   const [loading, setLoading] = useState(true);
@@ -28,14 +31,19 @@ export default function Board() {
     setTasks(data.content);
   }, [id, filters]);
 
+  const loadMembers = useCallback(async () => {
+    setMembers((await api.get(`/projects/${id}/members`)).data);
+  }, [id]);
+
   useEffect(() => {
     (async () => {
       try {
         setProject((await api.get(`/projects/${id}`)).data);
-        setMembers((await api.get(`/projects/${id}/members`)).data);
+        await loadMembers();
+        if (isManager) setAllUsers((await api.get('/users')).data);
       } catch (e) { setError(errorMessage(e)); }
     })();
-  }, [id]);
+  }, [id, isManager, loadMembers]);
 
   useEffect(() => {
     setLoading(true);
@@ -70,6 +78,16 @@ export default function Board() {
     catch (err) { setTasks(prev); setError(errorMessage(err)); }
   };
 
+  const addMember = async (e) => {
+    e.preventDefault();
+    const userId = Number(e.target.userId.value);
+    if (!userId) return;
+    try { await api.post(`/projects/${id}/members`, { userId }); await loadMembers(); }
+    catch (err) { setError(errorMessage(err)); }
+  };
+
+  const memberIds = new Set(members.map((m) => m.userId));
+
   return (
     <>
       <h2>{project?.name ?? 'Project'}</h2>
@@ -95,6 +113,15 @@ export default function Board() {
           <option value="">All assignees</option>
           {members.map((m) => <option key={m.userId} value={m.userId}>{m.fullName}</option>)}
         </select>
+        {isManager && (
+          <form className="row" onSubmit={addMember}>
+            <select name="userId" defaultValue="">
+              <option value="">Add member…</option>
+              {allUsers.filter((u) => !memberIds.has(u.id)).map((u) => <option key={u.id} value={u.id}>{u.fullName} ({u.role})</option>)}
+            </select>
+            <button className="ghost">Add</button>
+          </form>
+        )}
       </div>
 
       {loading && tasks.length === 0 ? <Loading /> : (
