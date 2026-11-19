@@ -53,6 +53,13 @@ export default function Board() {
     } catch (err) { setError(errorMessage(err)); }
   };
 
+  const moveTask = async (taskId, status) => {
+    const prev = tasks;
+    setTasks((ts) => ts.map((t) => (t.id === taskId ? { ...t, status } : t)));
+    try { await api.patch(`/tasks/${taskId}/status`, { status }); }
+    catch (err) { setTasks(prev); setError(errorMessage(err)); }
+  };
+
   return (
     <>
       <h2>{project?.name ?? 'Project'}</h2>
@@ -75,10 +82,17 @@ export default function Board() {
       {loading ? <Loading /> : (
         <div className="board">
           {COLUMNS.map((col) => (
-            <div key={col.key} className="column">
+            <div key={col.key} className="column"
+                 onDragOver={(e) => e.preventDefault()}
+                 onDrop={(e) => {
+                   const taskId = Number(e.dataTransfer.getData('text/plain'));
+                   const t = tasks.find((x) => x.id === taskId);
+                   if (t && t.status !== col.key) moveTask(taskId, col.key);
+                 }}>
               <h4>{col.label} <span className="badge">{byStatus[col.key].length}</span></h4>
               {byStatus[col.key].map((t) => (
-                <div key={t.id} className={`task p-${t.priority}`}>
+                <div key={t.id} className={`task p-${t.priority}`} draggable
+                     onDragStart={(e) => e.dataTransfer.setData('text/plain', String(t.id))}>
                   <strong>{t.title}</strong>
                   <div className="meta">
                     <span className="tag">{t.priority}</span>
